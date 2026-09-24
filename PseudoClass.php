@@ -1,192 +1,326 @@
 <?php
 
-    /** The functional constructor for MyPseudoClass with 
-     * parameters $name and $lastName. The $callStatic is
-     * an override flag that if it is true it causes the 
-     * static methods to be called instead of returning the
-     * constructor. In this case the arguments are not used
-     * to initialize the pseudo object instance but instead
-     * are used to call the static methods embedded within 
-     * the PsuedoClass functional constructor in the form
-     * of an array.
-     * */     
-    function PseudoClass(array $arguments, bool $callStatic = false) {
+    $PseudoClass = function($arguments, bool $callStatic = false) {
 
-        $PseudoClass = (function() {
+        /** The static context of the pseudo class. This is
+        * used to keep the members that are set up
+        * independently of the process involving the set
+        * up of the instance context. This context is
+        * passed to the pseudo constructor closure so that
+        * the instance context can interact with the
+        * static context but not vice-versa in other words
+        * the static context cannot interact with the 
+        * instance context.
+        */
+        static $static = [
+            'properties' => [
+                'userId' => '1' 
+            ],
+            'functions' => [
+                'getUserId' => function($static) {
+                    return $static['properties']['userId']++;
+                },
+                'getClassName' => function($static) {
+                    return "PseudoClass";
+                }
+            ]
+        ];
 
-            $constructor = function($arguments, $properties = null, $functions = null) {
+        // Public interface of the static context
+        static $staticObject = [
+            'getClassName' => 'function'
+        ];
 
-                $getName = function($properties, $functions) {
-                    $functions['randomFunction']($properties, $functions, $properties['name']);
-                    //return $name;
-                    return $properties['name'];
-                };
-                
-                $getLastName = function($properties, $functions) {
-                    return $properties['lastName'];
-                };
+        /** The functional constructor for MyPseudoClass with 
+         * parameters $name and $lastName. The $callStatic is
+         * an override flag that if it is true it causes the 
+         * static methods to be called instead of returning the
+         * constructor. In this case the arguments are not used
+         * to initialize the pseudo object instance but instead
+         * are used to call the static methods embedded within 
+         * the PsuedoClass functional constructor in the form
+         * of an array.
+         * */     
+        $MetaClass = function (array $arguments, bool $callStatic = false) use(&$static, &$staticObject) {
 
-                $randomFunction = function($properties, $functions, string &$input) {
-                    $input[0] = mb_strtolower($input[0]);
-                    $input = 'M' . $input;
-                };
+            $PseudoConstructor = (function() {
 
-                if(!$properties)
-                    $properties = [
-                        'name' => $arguments['name'], 
-                        'lastName' => $arguments['lastName']
+                $constructor = function(&$instance, $static, $arguments) {
+
+                    $getName = function($instance, $static) {
+                        $m_randomFunction = $instance['functions']['randomFunction'];
+                        $m_name = $instance['properties']['name'];
+                        $m_randomFunction($m_name);
+                        //return $name;
+                        return $m_name;
+                    };
+
+                    $setName = function($instance, $static, $arguments) {
+                        $name = $arguments['name'];
+                        $instance['properties']['name'] = $name;
+                    };
+                    
+                    $getUserId = function($instance, $static) {
+                        $userId = $instance['properties']['userId'];
+                        return $userId;
+                    };
+
+                    $getLastName = function($instance, $static) {
+                        $lastName = $instance['properties']['lastName'];
+                        return $lastName;
+                    };
+
+                    $randomFunction = function(&$input) use($instance, $static) {
+                        $input[0] = mb_strtolower($input[0]);
+                        $input = 'M' . $input;
+                    };
+
+                    /** Populate the $instance array entries 
+                     * with properties and functions.
+                    */
+                    if(!$instance)
+                        $instance = [
+                            'properties' => [
+                                'name' => $arguments['name'], 
+                                'lastName' => $arguments['lastName'],
+                                'userId' => (function() use($static) {
+                                    return $static['functions']['getUserId']($static);
+                                })()
+                            ],
+                            'functions' => [
+                                'randomFunction' => $randomFunction,
+                                'getName' => $getName,
+                                'getLastName' => $getLastName
+                            ]
+                        ];
+
+                    /** Proto object public interface. */
+                    return [ 
+                        'name' => 'property',
+                        'lastName' => 'property',
+                        'getName' => 'function',
+                        'getLastName' => 'function',
+                        'getUserId' => 'function',
+                        'setName' => 'function'             
                     ];
 
-                if(!$functions)
-                    $functions = [
-                        'randomFunction' => $randomFunction,
-                        'getName' => $getName,
-                        'getLastName' => $getLastName
-                    ];
+                };
 
-                return [ 
-                    'name' => 'property',
-                    'lastName' => 'property',
-                    'getName' => 'function',
-                    'getLastName' => 'function',
-                    'properties' => $properties,
-                    'functions' => $functions
-                ];
+                return $constructor;
 
+            })();
+
+            /** Proto object is the instance interface used for
+             * public access it defines the names and types of 
+             * pseudo class members located in the $properties 
+             * and the $functions arrays respectively.  
+             * */ 
+            $instance = [];
+
+            /** Do not go through the initialization process 
+             * if a static call is requested.
+             */
+            if (!$callStatic)
+                $protoObject = $PseudoConstructor($instance, $static, $arguments);        
+
+            /** The invoker is used to access the public 
+             * interface of the pseudoclass as well as the
+             * static members. 
+             * */
+            $invoker = function(
+                string $invocationName, 
+                array $arguments = [],     
+                bool $isStatic = false,        
+                bool $addExtension = false            
+                ) 
+                use(&$instance, &$protoObject, &$static, &$staticObject) {     
+                /** There are two modes the invoker can be used 
+                 * in the first is when there is no extension 
+                 * to add which is the default in this case the 
+                 * function either returns a property or calls
+                 * a function defined in the proto or the static 
+                 * object that are used for public access. 
+                 * 
+                 * The second mode is enabled by passing true 
+                 * as value to $addExtension in this case the 
+                 * $invocationName argument is the name of the
+                 * property or the function to be added to the
+                 * pseudo or the object and the $arguments 
+                 * input is structured as follows
+                 * 
+                 * */    
+
+                /** $arguments when $addExtension = true is 
+                 * passed
+                 * 
+                 * string 'type' : 'function|property' this is
+                 * type of the member to be added.
+                 * 
+                 * mixed|callable 'value' : the value of the 
+                 * property or the function to be added.
+                 *  
+                 * bool 'isPublic' : indicates whether the 
+                 * member to be added is public or private.
+                 */            
+                if ($addExtension === true) {
+                    if (empty($arguments))
+                        die("Arguments cannot be emtpy when adding an extension.");
+
+                    /** Unfurl the arguments. */
+                    $type = $arguments['type'];
+                    $value = $arguments['value'];
+                    $isPublic = $arguments['isPublic'];
+
+                    if ($type === 'property')
+                        /** Check whether isStatic is set. */
+                        if ($isStatic)             
+                            $static['properties'][$invocationName] = $value;
+                        else 
+                            $instance['properties'][$invocationName] = $value;
+                    else if($type === 'function')
+                        /** Check whether isStatic is set. */
+                        if ($isStatic)
+                            $static['functions'][$invocationName] = $value;
+                        else 
+                            $instance['functions'][$invocationName] = $value;                    
+
+                    if ($isPublic === true) 
+                        /** Check whether isStatic is set. */
+                        if ($isStatic)
+                            $staticObject[$invocationName] = $arguments['type'];
+                        else 
+                            $protoObject[$invocationName] = $arguments['type'];
+                    
+                /** Add extension is false. */
+                } else {
+                    /** Non-static calls. */
+                    if(!$isStatic) {
+                        /** Ensure that the $invocationName is in 
+                         * the $protoObject array then take action 
+                         * based on whether it is a function or a 
+                         * property.
+                         * 
+                         * The $instance array provides the context
+                         * and the $arguments array contains the 
+                         * actual arguments to be supplied for a 
+                         * function to be called.
+                         */
+                        if ($protoObject[$invocationName])   
+                            if ($protoObject[$invocationName] === 'function')
+                                return $instance['functions'][$invocationName](
+                                    $instance, $static, $arguments                        
+                                );
+                            else 
+                                return $instance['properties'][$invocationName];
+
+                    /** Static calls. */
+                    } else {
+                        /** Check whether the $invocationName 
+                         * is defined in $staticObject then 
+                         * either call the corresponding 
+                         * function or return the property.
+                         */
+                        if($staticObject[$invocationName]) 
+                            if($staticObject[$invocationName] === 'function') 
+                                return $static['functions'][$invocationName](
+                                    $static, $arguments
+                                );
+                            else 
+                                return $static['properties'][$invocationName];                    
+                    }
+                    
+                }
             };
 
-            return $constructor;
-
-        })();
-
-        /** Proto object is the instance interface used for
-         * public access it defines the names and types of 
-         * pseudo class members located in the $properties 
-         * and the $functions arrays respectively.  
-         * */ 
-        $protoObject = $PseudoClass($arguments);
-        $properties = $protoObject['properties'];
-        $functions = $protoObject['functions'];
-
-        /** The invoker is used to access the public 
-         * interface of the pseudoclass as well as the
-         * static members. 
-         * */
-        $invoker = function(
-            string $invocationName, 
-            array $arguments = [], 
-            bool $addExtension = false
-            ) 
-            use(&$properties, &$functions, &$protoObject) {     
-            /** There are two modes the invoker can be used 
-             * first is when there is no extension to add
-             * which is the default in this case the 
-             * function either returns a property or calls
-             * a function defined in the proto object. The
-             * second mode is enabled by passing true as 
-             * value to $extension in this case the 
-             * $invocationName arguments is the name of the
-             * property or the function to be added to the
-             * pseudo object. The second mode either calls
-             * a function or returns a property that is in
-             * the $protoObject.
-             * 
-             * */    
-
-            /** Adds a new property or a function to the 
-             * pseudo object (not the class) using the 
-             * information passed in the $arguments 
-             * variable. In this mode $arguments cannot be 
-             * empty. No invocations happens in this mode 
-             * therefore $invocationName is ignored.         
-             * 'name' : The name of the extension to add
-             * 'type' : The type of the extension to add it is
-             * equal to either 'property' or 'function'
-             * 'value' : The value of the extension to add if 
-             * they type is 'function' then the type of value 
-             * is callable.
-             * 'isPublic' If true then add the extension to the
-             * protoObject.
-             */
-            if($addExtension === true) {
-                if(empty($arguments))
-                    die("Arguments cannot be emtpy when adding an extension.");
-
-                $type = $arguments['type'];
-
-                if($type === 'property')
-                    $properties[$arguments['name']] = $arguments['value'];
-                else if($type === 'function')
-                    $functions[$arguments['name']] = $arguments['value'];
-
-                if($arguments['isPublic'] === true) {
-                    $protoObject[$arguments['name']] = $arguments['type'];
-            }
-
+            /** If a static call request is received then call 
+             * the static function with the given $arguments
+             * array using $invoker.
+            */
+            if ($callStatic) {
+                $invocationName = $arguments['invocationName'];
+                $staticArguments = $arguments['staticArguments'];
+                return $invoker($invocationName, $staticArguments, true);
             } else {
-                /** Ensure that the $invocationName is in 
-                 * the $protoObject array then call it using 
-                 * the $properties and $functions to provide 
-                 * the context and the $arguments array as 
-                 * the actual argument if it is a function 
-                 * and return the value if it is a property.
-                 */
-                if ($protoObject[$invocationName])   
-                    if ($protoObject[$invocationName] === 'function')
-                        return $functions[$invocationName](
-                            $properties, $functions, $arguments                        
-                        );
-                    else 
-                        return $properties[$invocationName];
+                return $invoker;
             }
         };
 
-        /** If a static call request is received then call 
-         * the static function with the given $arguments
-         * array using $invoker.
-        */
-        if ($callStatic) {
+        return $MetaClass($arguments, $callStatic);
 
-        } else {
-            return $invoker;
-        }
-    }
+    };
 
+    /** Create a new instance. */
     $arguments = [
         'name' => 'Alice',
         'lastName' => 'Weidel'
     ];
 
-    $aliceWeidel = PseudoClass($arguments);
-    var_dump($aliceWeidel('getName'));    
+    $aliceWeidel = $PseudoClass($arguments);
+    echo "{$aliceWeidel('getName')}\n";    
 
-    $extension = [
-        'name' => 'email',
+    /** Add an instance property. */
+    $invocationName = 'email';
+    
+    $arguments = [
         'type' => 'property',
         'value' => 'alice@example.com',
-        'isPublic' => true 
+        'isPublic' => true
     ];
 
-    $aliceWeidel('', $extension, true);
+    $aliceWeidel($invocationName, $arguments, false, true);
 
-    var_dump($aliceWeidel('email'));
+    /** Display the added instance property. */
+    echo "{$aliceWeidel('email')}\n";
 
-    $extension = [
-        'name' => 'sayHello',
+    /** Add an instance function. */
+    $invocationName = 'sayHello';
+    $arguments = [        
         'type' => 'function',
-        'value' => function($properties, $functions) {
-            echo "Hello World!!! from : " . $properties['lastName'] . "\n";
+        'value' => function($instance, $static) {
+            echo "Hello World!!! from : " . $instance['functions']['getLastName']($instance, $static) . "\n";
         },
         'isPublic' => true 
     ];
 
-    $aliceWeidel('', $extension, true);
-    $aliceWeidel('sayHello');
+    /** Call the added instance function. */
+    $aliceWeidel($invocationName, $arguments, false, true);
+    echo "{$aliceWeidel('sayHello')}";
 
+    /** Create a new instance. */
     $arguments = [
         'name' => 'Jason',
         'lastName' => 'Brown'
     ];
 
-    $jasonBrown = PseudoClass($arguments);
-    var_dump($jasonBrown('getName'));
+    $jasonBrown = $PseudoClass($arguments);
+
+    /** Call the added instance function. */
+    echo "{$jasonBrown('getName')}\n";
+
+    /** Call static function. */
+    $arguments = [
+        'invocationName' => 'getClassName',
+        'staticArguments' => []
+    ];
+    echo "{$PseudoClass($arguments, true)}\n";
+
+    /** Add new static function extension. */
+    $invocationName = 'sayHelloStatic';
+    $arguments = [        
+        'type' => 'function',
+        'value' => function($static) {
+            echo "Hello World!!! from static \n";
+        },
+        'isPublic' => true 
+    ];
+
+    $aliceWeidel($invocationName, $arguments, true, true);
+
+    /** Call the added static function. */
+    $arguments = [
+        'invocationName' => 'sayHelloStatic',
+        'staticArguments' => []
+    ];
+    echo "{$PseudoClass($arguments, true)}\n";
+
+
